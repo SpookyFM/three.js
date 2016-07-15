@@ -17,6 +17,9 @@
 	<body>
 
 		<script src="../build/three.js"></script>
+		<button id="button-matrix">Use Matrix</button>
+		<button id="button-quat">Use Quaternion</button>
+		<button id="button-refresh">Refresh</button>
 		
 		<div id="slider"></div>
 		<label for="amount">Price range:</label>
@@ -30,12 +33,101 @@
 			var width = 300;
 			var height = 200;
 			
+			var matrix1;
+			var matrix2;
+			
+			var quaternion1;
+			var quaternion2;
+			
+			var interpolationFactor;
+			
+			var useMatrix = true;
 			
 			init();
 			animate();
 
+			function matrixLerp(m1, m2, t)
+			{
+				var a1 = new Array(16);
+				var a2 = new Array(16);
+				var aResult = new Array(16);
+				m1.toArray(a1);
+				m2.toArray(a2);
+				for (var i = 0; i < 16; i++)
+				{
+					var entry = a1[i] * (1.0 - t) + a2[i] * t;
+					aResult[i] = entry;
+				}
+				var result = new THREE.Matrix4();
+				result.fromArray(aResult);
+				return result;
+			}
+			
+			function quaternionSLERP(q1, q2, t)
+			{
+				var result = q1.clone();
+				result.slerp(q2, t);
+				return result;
+			}
+			
+			// x,y,z will be the axis, w the angle
+			function makeRandomAxisAngle()
+			{
+				var result = new THREE.Vector4;
+				result.setX(Math.random());
+				result.setY(Math.random());
+				result.setZ(Math.random());
+				result.setW(0.0);
+				result.normalize();
+				result.setW(Math.random() * 2.0 * Math.PI);
+				return result;
+			}
+			
+			function generateMatrix(axisAngle)
+			{
+				var angle = axisAngle.w;
+				var axis = new THREE.Vector3;
+				axis.setX(axisAngle.x);
+				axis.setY(axisAngle.y);
+				axis.setZ(axisAngle.z);
+				
+				var m = new THREE.Matrix4;
+				m.makeRotationAxis(axis, angle);
+				return m;
+			}
+			
+			function generateQuaternion(axisAngle)
+			{
+				var angle = axisAngle.w;
+				var axis = new THREE.Vector3;
+				axis.setX(axisAngle.x);
+				axis.setY(axisAngle.y);
+				axis.setZ(axisAngle.z);
+				
+				var q = new THREE.Quaternion();
+				q.setFromAxisAngle(axis, angle);
+				return q;
+			}
+			
+			function initRotations()
+			{
+				var axisAngle1 = makeRandomAxisAngle();
+				var axisAngle2 = makeRandomAxisAngle();
+								
+				// Set up the random matrices
+				matrix1 = generateMatrix(axisAngle1);
+				matrix2 = generateMatrix(axisAngle2);
+				
+				// Set up the quaternions
+				quaternion1 = generateQuaternion(axisAngle1);
+				quaternion2 = generateQuaternion(axisAngle2);
+			}
+			
 			function init() {
 
+				initRotations();
+				
+			
 				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 1000 );
 				camera.position.z = 400;
 
@@ -47,7 +139,12 @@
 				var material = new THREE.MeshBasicMaterial( { map: texture } );
 
 				mesh = new THREE.Mesh( geometry, material );
+				
+				// Important: We need to disable three.js from updating the matrix based on the rotation, translation etc.
+				mesh.matrixAutoUpdate = false;
+				
 				scene.add( mesh );
+		
 
 				renderer = new THREE.WebGLRenderer();
 				renderer.setPixelRatio( window.devicePixelRatio );
@@ -57,7 +154,6 @@
 				//
 
 				window.addEventListener( 'resize', onWindowResize, false );
-
 			}
 
 			function onWindowResize() {
@@ -73,11 +169,19 @@
 
 				requestAnimationFrame( animate );
 
-				mesh.rotation.x += 0.005;
-				mesh.rotation.y += 0.01;
+				if (useMatrix)
+				{
+					var interpolatedMatrix = matrixLerp(matrix1, matrix2, interpolationFactor);
+					mesh.matrix = interpolatedMatrix;
+				} else
+				{
+					var interpolatedQuaternion = quaternionSLERP(quaternion1, quaternion2, interpolationFactor);
+					var matrix = new THREE.Matrix4();
+					matrix.makeRotationFromQuaternion(interpolatedQuaternion);
+					mesh.matrix = matrix;
+				}
 
 				renderer.render( scene, camera );
-
 			}
 			
 			 $(function() {
@@ -87,7 +191,26 @@
 				step: 0.005,
 				slide: function( event, ui ) {
 					$( "#amount" ).val( ui.value );
+					interpolationFactor = ui.value;
 					}
+				});
+				
+				$("#button-matrix")
+				.button()
+				.click(function(){ 
+					useMatrix = true;
+				});
+				
+				$("#button-quat")
+				.button()
+				.click(function(){ 
+					useMatrix = false;
+				});
+				
+				$("#button-refresh")
+				.button()
+				.click(function(){ 
+					initRotations();
 				});
 			});
 		
