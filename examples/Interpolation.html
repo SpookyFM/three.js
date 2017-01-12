@@ -19,10 +19,11 @@
 		<script src="../build/three.js"></script>
 		<button id="button-matrix">Use Matrix</button>
 		<button id="button-quat">Use Quaternion</button>
+        <button id="button-euler">Use Euler</button>
 		<button id="button-refresh">Refresh</button>
 		
 		<div id="slider"></div>
-		<label for="amount">Price range:</label>
+		<label for="amount">Interpolation factor:</label>
   <input type="text" id="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
 
 		<script>
@@ -30,18 +31,23 @@
 			var camera, scene, renderer;
 			var mesh;
 
-			var width = 300;
-			var height = 200;
+			var width = 640;
+			var height = 640;
 			
 			var matrix1;
 			var matrix2;
 			
 			var quaternion1;
 			var quaternion2;
+            
+            var euler1;
+            var euler2;
 			
 			var interpolationFactor;
 			
 			var useMatrix = true;
+            var useQuat = false;
+            var useEuler = false;
 			
 			init();
 			animate();
@@ -69,6 +75,16 @@
 				result.slerp(q2, t);
 				return result;
 			}
+            
+            function eulerLerp(e1, e2, t)
+            {
+                var v1 = e1.toVector3();
+                var v2 = e2.toVector3();
+                var vLerp = v1.lerp(v2, t);
+                var result = new THREE.Euler();
+                result.setFromVector3(vLerp);
+                return result;
+            }
 			
 			// x,y,z will be the axis, w the angle
 			function makeRandomAxisAngle()
@@ -108,6 +124,15 @@
 				q.setFromAxisAngle(axis, angle);
 				return q;
 			}
+            
+            function generateEuler(axisAngle)
+            {
+                // Go via the quaternion
+                var quat = generateQuaternion(axisAngle);
+                var result = new THREE.Euler();
+                result.setFromQuaternion(quat);
+                return result;
+            }
 			
 			function initRotations()
 			{
@@ -121,6 +146,10 @@
 				// Set up the quaternions
 				quaternion1 = generateQuaternion(axisAngle1);
 				quaternion2 = generateQuaternion(axisAngle2);
+                
+                // Set up the euler angles
+                euler1 = generateEuler(axisAngle1);
+                euler2 = generateEuler(axisAngle2);
 			}
 			
 			function init() {
@@ -147,7 +176,7 @@
 		
 
 				renderer = new THREE.WebGLRenderer();
-				renderer.setPixelRatio( window.devicePixelRatio );
+				//renderer.setPixelRatio( window.devicePixelRatio );
 				renderer.setSize( width, height );
 				document.body.appendChild( renderer.domElement );
 
@@ -173,13 +202,19 @@
 				{
 					var interpolatedMatrix = matrixLerp(matrix1, matrix2, interpolationFactor);
 					mesh.matrix = interpolatedMatrix;
-				} else
+				} else if (useQuat)
 				{
 					var interpolatedQuaternion = quaternionSLERP(quaternion1, quaternion2, interpolationFactor);
 					var matrix = new THREE.Matrix4();
 					matrix.makeRotationFromQuaternion(interpolatedQuaternion);
 					mesh.matrix = matrix;
-				}
+				} else
+                {
+                    var interpolatedEuler = eulerLerp(euler1, euler2, interpolationFactor);
+                    var matrix = new THREE.Matrix4();
+                    matrix.makeRotationFromEuler(interpolatedEuler);
+                    mesh.matrix = matrix;
+                }
 
 				renderer.render( scene, camera );
 			}
@@ -199,12 +234,20 @@
 				.button()
 				.click(function(){ 
 					useMatrix = true;
+                    useQuat = useEuler = false;
 				});
 				
 				$("#button-quat")
 				.button()
 				.click(function(){ 
-					useMatrix = false;
+                    useQuat = true;
+                    useMatrix = useEuler = false;
+				});
+                 $("#button-euler")
+				.button()
+				.click(function(){ 
+                    useEuler = true;
+                    useMatrix = useQuat = false;
 				});
 				
 				$("#button-refresh")
